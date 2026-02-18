@@ -46,6 +46,10 @@
     .modal-actions button { padding: .45rem 1rem; border-radius: 6px; border: 1px solid #ccc; cursor: pointer; font-size: .85rem; }
     .modal-actions .btn-save { background: #4a7c34; color: #fff; border-color: #4a7c34; }
     .empty-state { text-align: center; padding: 2.5rem 1rem; color: #999; font-size: .95rem; }
+    .thumb { width: 48px; height: 48px; object-fit: cover; border-radius: 6px; cursor: pointer; }
+    .img-preview { max-width: 100%; max-height: 120px; border-radius: 6px; margin-top: .3rem; }
+    .img-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: flex; align-items: center; justify-content: center; z-index: 200; cursor: pointer; }
+    .img-modal-overlay img { max-width: 90%; max-height: 90%; border-radius: 8px; }
   </style>
 </head>
 <body>
@@ -73,7 +77,7 @@
   <table>
     <thead>
       <tr>
-        <th>Name</th><th>Category</th><th>Forage Season</th>
+        <th>Photo</th><th></th>Name</th><th>Category</th><th>Forage Season</th>
         <th>Forage Window</th><th>Use-By Window</th><th>Status</th>
         <th>Notes</th><th>Actions</th>
       </tr>
@@ -103,6 +107,9 @@
     <input id="fEnd" type="date">
     <label for="fUseBy">Use-By (days after harvest)</label>
     <input id="fUseBy" type="number" min="0" value="7" placeholder="Days">
+    <label for="fImage">Photo</label>
+    <input id="fImage" type="file" accept="image/*">
+    <div id="fImagePreview" style="margin-top:.4rem;"></div>
     <label for="fNotes">Notes</label>
     <textarea id="fNotes" placeholder="Habitat, preparation tips, etc."></textarea>
     <div class="modal-actions">
@@ -117,6 +124,7 @@
 const STORAGE_KEY = 'foraging_chart';
 let items = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
 let editingId = null;
+let pendingImage = null;
 
 function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); }
 
@@ -142,13 +150,14 @@ function renderTable() {
   let filtered = filter ? items.filter(i => i.season === filter) : [...items];
 
   if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="8" class="empty-state">${items.length ? 'No items match this filter.' : 'No items yet — click "+ Add Item" to start tracking.'}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="empty-state">${items.length ? 'No items match this filter.' : 'No items yet — click "+ Add Item" to start tracking.'}</td></tr>`;
     return;
   }
 
   tbody.innerHTML = filtered.map(item => {
     const status = getStatus(item);
     return `<tr>
+      <td>${item.image ? `<img src="${item.image}" class="thumb" alt="${esc(item.name)}" onclick="viewImage('${item.id}')">` : '—'}</td>
       <td>${esc(item.name)}</td>
       <td>${esc(item.category)}</td>
       <td>${esc(item.season)}</td>
@@ -181,14 +190,55 @@ function openModal(id) {
     document.getElementById('fEnd').value = item.forageEnd;
     document.getElementById('fUseBy').value = item.useByDays;
     document.getElementById('fNotes').value = item.notes;
+    document.getElementById('fImagePreview').innerHTML = item.image ? `<img src="${item.image}" class="img-preview" alt="Preview">` : '';
+    pendingImage = item.image || null;
   } else {
     ['fName','fNotes'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('fUseBy').value = 7;
     document.getElementById('fStart').value = '';
     document.getElementById('fEnd').value = '';
+    document.getElementById('fImage').value = '';
+    document.getElementById('fImagePreview').innerHTML = '';
+    pendingImage = null;
   }
   document.getElementById('modalOverlay').classList.remove('hidden');
   document.getElementById('fName').focus();
+}
+
+// Handle image file selection
+document.getElementById('fImage').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    // Resize to keep localStorage manageable
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      const maxDim = 400;
+      let w = img.width, h = img.height;
+      if (w > maxDim || h > maxDim) {
+        if (w > h) { h = h * maxDim / w; w = maxDim; }
+        else { w = w * maxDim / h; h = maxDim; }
+      }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      pendingImage = canvas.toDataURL('image/jpeg', 0.7);
+      document.getElementById('fImagePreview').innerHTML = `<img src="${pendingImage}" class="img-preview" alt="Preview">`;
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+function viewImage(id) {
+  const item = items.find(i => i.id === id);
+  if (!item || !item.image) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'img-modal-overlay';
+  overlay.innerHTML = `<img src="${item.image}" alt="${item.name}">`;
+  overlay.onclick = () => overlay.remove();
+  document.body.appendChild(overlay);
 }
 
 function closeModal() {
@@ -210,6 +260,7 @@ function saveItem() {
     forageEnd,
     useByDays: parseInt(document.getElementById('fUseBy').value) || 7,
     notes: document.getElementById('fNotes').value.trim(),
+    image: pendingImage || null,
   };
 
   if (editingId) {
