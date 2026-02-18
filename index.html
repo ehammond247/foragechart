@@ -56,6 +56,9 @@
 <div class="toolbar">
   <button class="btn-primary" onclick="openModal()" aria-label="Add new item">+ Add Item</button>
   <button onclick="exportCSV()" aria-label="Export to CSV">📄 Export CSV</button>
+  <button onclick="saveBackup()" aria-label="Save backup">💾 Save Backup</button>
+  <button onclick="document.getElementById('loadBackupInput').click()" aria-label="Load backup">📂 Load Backup</button>
+  <input type="file" id="loadBackupInput" accept=".json" style="display:none" onchange="loadBackup(event)">
   <select id="seasonFilter" onchange="renderTable()" aria-label="Filter by season">
     <option value="">All Seasons</option>
     <option value="Spring">Spring</option>
@@ -242,6 +245,37 @@ function addToGCal(id) {
   );
   const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startDate}/${endDate}&details=${details}`;
   window.open(url, '_blank', 'noopener');
+}
+
+// Backup save — downloads all data as a JSON file
+function saveBackup() {
+  if (!items.length) { alert('Nothing to back up.'); return; }
+  const blob = new Blob([JSON.stringify(items, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'foraging_backup.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// Backup load — restores data from a JSON file
+function loadBackup(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!Array.isArray(data)) { alert('Invalid backup file.'); return; }
+      if (items.length && !confirm('This will replace all your current data. Continue?')) return;
+      items = data;
+      save();
+      renderTable();
+      alert('Backup restored successfully!');
+    } catch { alert('Could not read backup file. Make sure it\'s a valid .json file.'); }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
 }
 
 // CSV export
