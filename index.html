@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Foraging Chart</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f4f1eb; color: #2d2a24; padding: 1.5rem; }
+    h1 { font-size: 1.6rem; margin-bottom: .4rem; color: #3a5a28; }
+    .subtitle { color: #6b6b6b; margin-bottom: 1.2rem; font-size: .9rem; }
+    /* toolbar */
+    .toolbar { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+    .toolbar button, .toolbar select {
+      padding: .45rem .9rem; border: 1px solid #b5c4a8; border-radius: 6px;
+      background: #fff; cursor: pointer; font-size: .85rem; color: #2d2a24;
+    }
+    .toolbar button:hover { background: #e8f0e0; }
+    .toolbar .btn-primary { background: #4a7c34; color: #fff; border-color: #4a7c34; }
+    .toolbar .btn-primary:hover { background: #3a5a28; }
+    /* filter */
+    #seasonFilter { min-width: 130px; }
+    /* table */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+    th, td { padding: .6rem .75rem; text-align: left; border-bottom: 1px solid #e8e5df; font-size: .85rem; }
+    th { background: #4a7c34; color: #fff; font-weight: 600; position: sticky; top: 0; }
+    tr:hover td { background: #f9f7f3; }
+    .badge { display: inline-block; padding: .15rem .5rem; border-radius: 10px; font-size: .75rem; font-weight: 600; }
+    .badge-in { background: #d4edda; color: #1b5e20; }
+    .badge-soon { background: #fff3cd; color: #856404; }
+    .badge-out { background: #f5d5d5; color: #8b1a1a; }
+    .actions button { background: none; border: none; cursor: pointer; font-size: .95rem; padding: .15rem .35rem; border-radius: 4px; }
+    .actions button:hover { background: #eee; }
+    /* modal */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; z-index: 100; }
+    .modal-overlay.hidden { display: none; }
+    .modal { background: #fff; border-radius: 10px; padding: 1.5rem; width: 95%; max-width: 480px; box-shadow: 0 8px 30px rgba(0,0,0,.18); }
+    .modal h2 { font-size: 1.15rem; margin-bottom: 1rem; color: #3a5a28; }
+    .modal label { display: block; font-size: .8rem; font-weight: 600; margin-bottom: .2rem; margin-top: .7rem; }
+    .modal input, .modal select, .modal textarea {
+      width: 100%; padding: .4rem .6rem; border: 1px solid #ccc; border-radius: 6px; font-size: .85rem;
+    }
+    .modal textarea { resize: vertical; min-height: 50px; }
+    .modal-actions { display: flex; gap: .5rem; justify-content: flex-end; margin-top: 1.2rem; }
+    .modal-actions button { padding: .45rem 1rem; border-radius: 6px; border: 1px solid #ccc; cursor: pointer; font-size: .85rem; }
+    .modal-actions .btn-save { background: #4a7c34; color: #fff; border-color: #4a7c34; }
+    .empty-state { text-align: center; padding: 2.5rem 1rem; color: #999; font-size: .95rem; }
+  </style>
+</head>
+<body>
+
+<h1>🌿 Foraging Chart</h1>
+<p class="subtitle">Track what to forage, when to pick it, and when to use it.</p>
+
+<div class="toolbar">
+  <button class="btn-primary" onclick="openModal()" aria-label="Add new item">+ Add Item</button>
+  <button onclick="exportCSV()" aria-label="Export to CSV">📄 Export CSV</button>
+  <select id="seasonFilter" onchange="renderTable()" aria-label="Filter by season">
+    <option value="">All Seasons</option>
+    <option value="Spring">Spring</option>
+    <option value="Summer">Summer</option>
+    <option value="Fall">Fall</option>
+    <option value="Winter">Winter</option>
+    <option value="Year-round">Year-round</option>
+  </select>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th><th>Category</th><th>Forage Season</th>
+        <th>Forage Window</th><th>Use-By Window</th><th>Status</th>
+        <th>Notes</th><th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+</div>
+
+<!-- Add / Edit Modal -->
+<div class="modal-overlay hidden" id="modalOverlay" role="dialog" aria-modal="true">
+  <div class="modal">
+    <h2 id="modalTitle">Add Forageable</h2>
+    <label for="fName">Name</label>
+    <input id="fName" placeholder="e.g. Chanterelle Mushroom">
+    <label for="fCategory">Category</label>
+    <select id="fCategory">
+      <option>Mushroom</option><option>Flower</option><option>Berry</option>
+      <option>Herb</option><option>Nut</option><option>Green</option><option>Root</option><option>Other</option>
+    </select>
+    <label for="fSeason">Forage Season</label>
+    <select id="fSeason">
+      <option>Spring</option><option>Summer</option><option>Fall</option><option>Winter</option><option>Year-round</option>
+    </select>
+    <label for="fStart">Forage Window Start</label>
+    <input id="fStart" type="date">
+    <label for="fEnd">Forage Window End</label>
+    <input id="fEnd" type="date">
+    <label for="fUseBy">Use-By (days after harvest)</label>
+    <input id="fUseBy" type="number" min="0" value="7" placeholder="Days">
+    <label for="fNotes">Notes</label>
+    <textarea id="fNotes" placeholder="Habitat, preparation tips, etc."></textarea>
+    <div class="modal-actions">
+      <button onclick="closeModal()">Cancel</button>
+      <button class="btn-save" onclick="saveItem()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+
+const STORAGE_KEY = 'foraging_chart';
+let items = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+let editingId = null;
+
+function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); }
+
+function getStatus(item) {
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const start = new Date(item.forageStart + 'T00:00:00');
+  const end = new Date(item.forageEnd + 'T00:00:00');
+  const soon = new Date(start); soon.setDate(soon.getDate() - 14);
+  if (today >= start && today <= end) return 'In Season';
+  if (today >= soon && today < start) return 'Coming Soon';
+  return 'Out of Season';
+}
+
+function statusBadge(status) {
+  const cls = status === 'In Season' ? 'badge-in' : status === 'Coming Soon' ? 'badge-soon' : 'badge-out';
+  return `<span class="badge ${cls}">${status}</span>`;
+}
+
+function renderTable() {
+  const filter = document.getElementById('seasonFilter').value;
+  const tbody = document.getElementById('tableBody');
+  let filtered = filter ? items.filter(i => i.season === filter) : [...items];
+
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="empty-state">${items.length ? 'No items match this filter.' : 'No items yet — click "+ Add Item" to start tracking.'}</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(item => {
+    const status = getStatus(item);
+    return `<tr>
+      <td>${esc(item.name)}</td>
+      <td>${esc(item.category)}</td>
+      <td>${esc(item.season)}</td>
+      <td>${item.forageStart} → ${item.forageEnd}</td>
+      <td>${item.useByDays} days</td>
+      <td>${statusBadge(status)}</td>
+      <td>${esc(item.notes || '—')}</td>
+      <td class="actions">
+        <button onclick="editItem('${item.id}')" title="Edit" aria-label="Edit ${esc(item.name)}">✏️</button>
+        <button onclick="deleteItem('${item.id}')" title="Delete" aria-label="Delete ${esc(item.name)}">🗑️</button>
+        <button onclick="addToGCal('${item.id}')" title="Add to Google Calendar" aria-label="Add ${esc(item.name)} to Google Calendar">📅</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function esc(s) {
+  const d = document.createElement('div'); d.textContent = s; return d.innerHTML;
+}
+
+function openModal(id) {
+  editingId = id || null;
+  document.getElementById('modalTitle').textContent = id ? 'Edit Forageable' : 'Add Forageable';
+  if (id) {
+    const item = items.find(i => i.id === id);
+    document.getElementById('fName').value = item.name;
+    document.getElementById('fCategory').value = item.category;
+    document.getElementById('fSeason').value = item.season;
+    document.getElementById('fStart').value = item.forageStart;
+    document.getElementById('fEnd').value = item.forageEnd;
+    document.getElementById('fUseBy').value = item.useByDays;
+    document.getElementById('fNotes').value = item.notes;
+  } else {
+    ['fName','fNotes'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('fUseBy').value = 7;
+    document.getElementById('fStart').value = '';
+    document.getElementById('fEnd').value = '';
+  }
+  document.getElementById('modalOverlay').classList.remove('hidden');
+  document.getElementById('fName').focus();
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.add('hidden');
+  editingId = null;
+}
+
+function saveItem() {
+  const name = document.getElementById('fName').value.trim();
+  const forageStart = document.getElementById('fStart').value;
+  const forageEnd = document.getElementById('fEnd').value;
+  if (!name || !forageStart || !forageEnd) { alert('Name and forage window dates are required.'); return; }
+
+  const data = {
+    name,
+    category: document.getElementById('fCategory').value,
+    season: document.getElementById('fSeason').value,
+    forageStart,
+    forageEnd,
+    useByDays: parseInt(document.getElementById('fUseBy').value) || 7,
+    notes: document.getElementById('fNotes').value.trim(),
+  };
+
+  if (editingId) {
+    const idx = items.findIndex(i => i.id === editingId);
+    items[idx] = { ...items[idx], ...data };
+  } else {
+    data.id = crypto.randomUUID();
+    items.push(data);
+  }
+  save(); renderTable(); closeModal();
+}
+
+function editItem(id) { openModal(id); }
+
+function deleteItem(id) {
+  if (!confirm('Delete this item?')) return;
+  items = items.filter(i => i.id !== id);
+  save(); renderTable();
+}
+
+// Google Calendar link — no API key needed, just opens a pre-filled event creation URL
+function addToGCal(id) {
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+  const title = encodeURIComponent(`🌿 Forage: ${item.name}`);
+  const startDate = item.forageStart.replace(/-/g, '');
+  // end date for all-day events in gcal needs to be the day AFTER
+  const endParts = item.forageEnd.split('-').map(Number);
+  const endD = new Date(endParts[0], endParts[1]-1, endParts[2]+1);
+  const endDate = endD.toISOString().slice(0,10).replace(/-/g, '');
+  const details = encodeURIComponent(
+    `Category: ${item.category}\nSeason: ${item.season}\nUse within ${item.useByDays} days of harvest.\n${item.notes ? 'Notes: ' + item.notes : ''}`
+  );
+  const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startDate}/${endDate}&details=${details}`;
+  window.open(url, '_blank', 'noopener');
+}
+
+// CSV export
+function exportCSV() {
+  if (!items.length) { alert('Nothing to export.'); return; }
+  const headers = ['Name','Category','Season','Forage Start','Forage End','Use-By Days','Notes'];
+  const rows = items.map(i => [i.name, i.category, i.season, i.forageStart, i.forageEnd, i.useByDays, i.notes].map(v => `"${String(v).replace(/"/g,'""')}"`));
+  const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'foraging_chart.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// Seed some example data if empty
+if (!items.length) {
+  items = [
+    { id: crypto.randomUUID(), name: 'Chanterelle', category: 'Mushroom', season: 'Summer', forageStart: '2026-06-15', forageEnd: '2026-09-30', useByDays: 5, notes: 'Found near oak and conifer trees. Sauté in butter.' },
+    { id: crypto.randomUUID(), name: 'Ramps (Wild Leek)', category: 'Green', season: 'Spring', forageStart: '2026-03-15', forageEnd: '2026-05-15', useByDays: 7, notes: 'Appalachian forests. Use leaves and bulbs.' },
+    { id: crypto.randomUUID(), name: 'Elderflower', category: 'Flower', season: 'Spring', forageStart: '2026-05-01', forageEnd: '2026-06-30', useByDays: 3, notes: 'Great for cordials and fritters. Dry for tea.' },
+    { id: crypto.randomUUID(), name: 'Wild Blackberry', category: 'Berry', season: 'Summer', forageStart: '2026-07-01', forageEnd: '2026-08-31', useByDays: 4, notes: 'Hedgerows and woodland edges.' },
+    { id: crypto.randomUUID(), name: 'Daylily', category: 'Flower', season: 'Summer', forageStart: '2026-06-01', forageEnd: '2026-08-15', useByDays: 2, notes: 'Buds and flowers are edible. Avoid lookalikes.' },
+  ];
+  save();
+}
+
+// Close modal on overlay click or Escape
+document.getElementById('modalOverlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+renderTable();
+</script>
+</body>
+</html>
