@@ -249,6 +249,7 @@ function renderTable() {
         <button onclick="editItem('${item.id}')" title="Edit" aria-label="Edit ${esc(item.name)}">✏️</button>
         <button onclick="deleteItem('${item.id}')" title="Delete" aria-label="Delete ${esc(item.name)}">🗑️</button>
         <button onclick="addToGCal('${item.id}')" title="Add to Google Calendar" aria-label="Add ${esc(item.name)} to Google Calendar">📅</button>
+        ${item.coords ? `<button onclick="window.open('https://www.google.com/maps?q=${encodeURIComponent(item.coords)}','_blank','noopener')" title="View on Map" aria-label="View ${esc(item.name)} on map">📍</button>` : ''}
       </td>
     </tr>`;
   }).join('');
@@ -275,6 +276,7 @@ function renderTable() {
           <button onclick="editItem('${item.id}')" aria-label="Edit ${esc(item.name)}">✏️</button>
           <button onclick="deleteItem('${item.id}')" aria-label="Delete ${esc(item.name)}">🗑️</button>
           <button onclick="addToGCal('${item.id}')" aria-label="Add to calendar">📅</button>
+          ${item.coords ? `<button onclick="window.open('https://www.google.com/maps?q=${encodeURIComponent(item.coords)}','_blank','noopener')" aria-label="View on map">📍</button>` : ''}
         </div>
       </div>
     </div>`;
