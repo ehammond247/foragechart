@@ -50,6 +50,11 @@
     .img-preview { max-width: 100%; max-height: 120px; border-radius: 6px; margin-top: .3rem; }
     .img-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: flex; align-items: center; justify-content: center; z-index: 200; cursor: pointer; }
     .img-modal-overlay img { max-width: 90%; max-height: 90%; border-radius: 8px; }
+    .loc-tag { display: inline-flex; align-items: center; gap: .25rem; background: #e8f0e0; border-radius: 12px; padding: .15rem .5rem; font-size: .75rem; margin: .15rem .2rem .15rem 0; }
+    .loc-tag a { color: #3a5a28; text-decoration: none; }
+    .loc-tag a:hover { text-decoration: underline; }
+    .loc-tag button { background: none; border: none; cursor: pointer; font-size: .7rem; color: #888; padding: 0 .1rem; }
+    .loc-tag button:hover { color: #c00; }
 
     /* Mobile card layout */
     .cards { display: none; }
@@ -107,7 +112,7 @@
       <tr>
         <th>Photo</th><th>Name</th><th>Category</th><th>Forage Season</th>
         <th>Forage Window</th><th>Use-By Window</th><th>Status</th>
-        <th>Location</th><th></th>Notes</th><th>Actions</th>
+        <th>Location</th><th>Notes</th><th>Actions</th>
       </tr>
     </thead>
     <tbody id="tableBody"></tbody>
@@ -140,10 +145,12 @@
     <label for="fImage">Photo</label>
     <input id="fImage" type="file" accept="image/*">
     <div id="fImagePreview" style="margin-top:.4rem;"></div>
-    <label for="fCoords">Location Found (coordinates)</label>
+    <label>Locations Found</label>
+    <div id="fLocationsList" style="margin-bottom:.3rem;"></div>
     <div style="display:flex;gap:.35rem;">
-      <input id="fCoords" style="flex:1;" placeholder="e.g. 35.6762, -83.4300">
-      <button type="button" onclick="useMyLocation()" style="white-space:nowrap;padding:.4rem .6rem;border:1px solid #b5c4a8;border-radius:6px;background:#e8f0e0;cursor:pointer;font-size:.8rem;">📍 Use My Location</button>
+      <input id="fCoordsInput" style="flex:1;" placeholder="e.g. 35.6762, -83.4300">
+      <button type="button" onclick="useMyLocation()" style="white-space:nowrap;padding:.4rem .6rem;border:1px solid #b5c4a8;border-radius:6px;background:#e8f0e0;cursor:pointer;font-size:.8rem;">📍 GPS</button>
+      <button type="button" onclick="addLocationToList()" style="white-space:nowrap;padding:.4rem .6rem;border:1px solid #b5c4a8;border-radius:6px;background:#e8f0e0;cursor:pointer;font-size:.8rem;">+ Add</button>
     </div>
     <label for="fNotes">Notes</label>
     <textarea id="fNotes" placeholder="Habitat, preparation tips, etc."></textarea>
@@ -163,6 +170,7 @@ let items = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
 let categories = JSON.parse(localStorage.getItem(CATEGORIES_KEY) || 'null') || [...DEFAULT_CATEGORIES];
 let editingId = null;
 let pendingImage = null;
+let pendingLocations = [];
 
 function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); }
 function saveCategories() { localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories)); populateCategoryFilter(); }
@@ -243,13 +251,13 @@ function renderTable() {
       <td>${item.forageStart} → ${item.forageEnd}</td>
       <td>${item.useByDays} days</td>
       <td>${statusBadge(status)}</td>
-      <td>${item.coords ? `<a href="https://www.google.com/maps?q=${encodeURIComponent(item.coords)}" target="_blank" rel="noopener" style="color:#4a7c34;">📍 Map</a>` : '—'}</td>
+      <td>${getLocations(item).length ? getLocations(item).map(loc => `<a href="https://www.google.com/maps?q=${encodeURIComponent(loc)}" target="_blank" rel="noopener" style="color:#4a7c34;font-size:.78rem;">📍</a>`).join(' ') : '—'}</td>
       <td>${esc(item.notes || '—')}</td>
       <td class="actions">
         <button onclick="editItem('${item.id}')" title="Edit" aria-label="Edit ${esc(item.name)}">✏️</button>
         <button onclick="deleteItem('${item.id}')" title="Delete" aria-label="Delete ${esc(item.name)}">🗑️</button>
         <button onclick="addToGCal('${item.id}')" title="Add to Google Calendar" aria-label="Add ${esc(item.name)} to Google Calendar">📅</button>
-        ${item.coords ? `<button onclick="window.open('https://www.google.com/maps?q=${encodeURIComponent(item.coords)}','_blank','noopener')" title="View on Map" aria-label="View ${esc(item.name)} on map">📍</button>` : ''}
+        ${getLocations(item).length ? `<button onclick="showLocations('${item.id}')" title="View Locations" aria-label="View locations for ${esc(item.name)}">📍</button>` : ''}
       </td>
     </tr>`;
   }).join('');
@@ -269,14 +277,14 @@ function renderTable() {
           ${esc(item.category)} · ${esc(item.season)}<br>
           📅 ${item.forageStart} → ${item.forageEnd}<br>
           ⏳ Use within ${item.useByDays} days
-          ${item.coords ? `<br>📍 <a href="https://www.google.com/maps?q=${encodeURIComponent(item.coords)}" target="_blank" rel="noopener" style="color:#4a7c34;">View on Map</a>` : ''}
+          ${getLocations(item).length ? `<br>📍 ${getLocations(item).length} location${getLocations(item).length > 1 ? 's' : ''} saved` : ''}
           ${item.notes ? `<br>📝 ${esc(item.notes)}` : ''}
         </div>
         <div class="card-actions">
           <button onclick="editItem('${item.id}')" aria-label="Edit ${esc(item.name)}">✏️</button>
           <button onclick="deleteItem('${item.id}')" aria-label="Delete ${esc(item.name)}">🗑️</button>
           <button onclick="addToGCal('${item.id}')" aria-label="Add to calendar">📅</button>
-          ${item.coords ? `<button onclick="window.open('https://www.google.com/maps?q=${encodeURIComponent(item.coords)}','_blank','noopener')" aria-label="View on map">📍</button>` : ''}
+          ${getLocations(item).length ? `<button onclick="showLocations('${item.id}')" aria-label="View locations">📍</button>` : ''}
         </div>
       </div>
     </div>`;
@@ -300,7 +308,8 @@ function openModal(id) {
     document.getElementById('fUseBy').value = item.useByDays;
     document.getElementById('fNotes').value = item.notes;
     document.getElementById('fImagePreview').innerHTML = item.image ? `<img src="${item.image}" class="img-preview" alt="Preview">` : '';
-    document.getElementById('fCoords').value = item.coords || '';
+    pendingLocations = [...getLocations(item)];
+    renderLocationsList();
     pendingImage = item.image || null;
   } else {
     ['fName','fNotes'].forEach(id => document.getElementById(id).value = '');
@@ -310,7 +319,9 @@ function openModal(id) {
     document.getElementById('fImage').value = '';
     document.getElementById('fImagePreview').innerHTML = '';
     document.getElementById('fCategoryCustom').value = '';
-    document.getElementById('fCoords').value = '';
+    document.getElementById('fCoordsInput').value = '';
+    pendingLocations = [];
+    renderLocationsList();
     populateCategoryDropdown();
     pendingImage = null;
   }
@@ -347,9 +358,38 @@ document.getElementById('fImage').addEventListener('change', function(e) {
 function useMyLocation() {
   if (!navigator.geolocation) { alert('Geolocation is not supported by your browser.'); return; }
   navigator.geolocation.getCurrentPosition(
-    pos => { document.getElementById('fCoords').value = `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`; },
+    pos => { document.getElementById('fCoordsInput').value = `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`; },
     err => { alert('Could not get your location. Make sure location access is enabled.'); }
   );
+}
+
+function getLocations(item) {
+  // Support both old single coords and new array format
+  if (item.locations && item.locations.length) return item.locations;
+  if (item.coords) return [item.coords];
+  return [];
+}
+
+function addLocationToList() {
+  const input = document.getElementById('fCoordsInput');
+  const val = input.value.trim();
+  if (!val) return;
+  pendingLocations.push(val);
+  input.value = '';
+  renderLocationsList();
+}
+
+function removeLocationFromList(idx) {
+  pendingLocations.splice(idx, 1);
+  renderLocationsList();
+}
+
+function renderLocationsList() {
+  const container = document.getElementById('fLocationsList');
+  if (!pendingLocations.length) { container.innerHTML = '<span style="font-size:.78rem;color:#999;">No locations added yet.</span>'; return; }
+  container.innerHTML = pendingLocations.map((loc, i) =>
+    `<span class="loc-tag"><a href="https://www.google.com/maps?q=${encodeURIComponent(loc)}" target="_blank" rel="noopener">📍 ${esc(loc)}</a><button type="button" onclick="removeLocationFromList(${i})" aria-label="Remove location">✕</button></span>`
+  ).join('');
 }
 
 function viewImage(id) {
@@ -359,6 +399,27 @@ function viewImage(id) {
   overlay.className = 'img-modal-overlay';
   overlay.innerHTML = `<img src="${item.image}" alt="${item.name}">`;
   overlay.onclick = () => overlay.remove();
+  document.body.appendChild(overlay);
+}
+
+function showLocations(id) {
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+  const locs = getLocations(item);
+  if (locs.length === 1) {
+    window.open(`https://www.google.com/maps?q=${encodeURIComponent(locs[0])}`, '_blank', 'noopener');
+    return;
+  }
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `<div class="modal" style="max-width:360px;">
+    <h2>📍 Locations for ${esc(item.name)}</h2>
+    <div style="display:flex;flex-direction:column;gap:.4rem;margin-top:.5rem;">
+      ${locs.map((loc, i) => `<a href="https://www.google.com/maps?q=${encodeURIComponent(loc)}" target="_blank" rel="noopener" style="display:block;padding:.45rem .6rem;background:#e8f0e0;border-radius:6px;color:#3a5a28;text-decoration:none;font-size:.85rem;">📍 Location ${i + 1}: ${esc(loc)}</a>`).join('')}
+    </div>
+    <div class="modal-actions"><button onclick="this.closest('.modal-overlay').remove()">Close</button></div>
+  </div>`;
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
   document.body.appendChild(overlay);
 }
 
@@ -381,7 +442,7 @@ function saveItem() {
     forageEnd,
     useByDays: parseInt(document.getElementById('fUseBy').value) || 7,
     notes: document.getElementById('fNotes').value.trim(),
-    coords: document.getElementById('fCoords').value.trim() || null,
+    locations: [...pendingLocations],
     image: pendingImage || null,
   };
 
@@ -413,10 +474,11 @@ function addToGCal(id) {
   const endParts = item.forageEnd.split('-').map(Number);
   const endD = new Date(endParts[0], endParts[1]-1, endParts[2]+1);
   const endDate = endD.toISOString().slice(0,10).replace(/-/g, '');
+  const locs = getLocations(item);
   const details = encodeURIComponent(
-    `Category: ${item.category}\nSeason: ${item.season}\nUse within ${item.useByDays} days of harvest.${item.coords ? '\nLocation: ' + item.coords : ''}\n${item.notes ? 'Notes: ' + item.notes : ''}`
+    `Category: ${item.category}\nSeason: ${item.season}\nUse within ${item.useByDays} days of harvest.${locs.length ? '\nLocations:\n' + locs.map((l,i) => `  ${i+1}. ${l}`).join('\n') : ''}\n${item.notes ? 'Notes: ' + item.notes : ''}`
   );
-  const location = item.coords ? encodeURIComponent(item.coords) : '';
+  const location = locs.length ? encodeURIComponent(locs[0]) : '';
   const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startDate}/${endDate}&details=${details}${location ? '&location=' + location : ''}`;
   window.open(url, '_blank', 'noopener');
 }
@@ -456,7 +518,7 @@ function loadBackup(event) {
 function exportCSV() {
   if (!items.length) { alert('Nothing to export.'); return; }
   const headers = ['Name','Category','Season','Forage Start','Forage End','Use-By Days','Coordinates','Notes'];
-  const rows = items.map(i => [i.name, i.category, i.season, i.forageStart, i.forageEnd, i.useByDays, i.coords || '', i.notes].map(v => `"${String(v).replace(/"/g,'""')}"`));
+  const rows = items.map(i => [i.name, i.category, i.season, i.forageStart, i.forageEnd, i.useByDays, getLocations(i).join(' | '), i.notes].map(v => `"${String(v).replace(/"/g,'""')}"`));
   const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
   const a = document.createElement('a');
