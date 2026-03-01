@@ -107,7 +107,7 @@
       <tr>
         <th>Photo</th><th>Name</th><th>Category</th><th>Forage Season</th>
         <th>Forage Window</th><th>Use-By Window</th><th>Status</th>
-        <th>Notes</th><th>Actions</th>
+        <th>Location</th><th></th>Notes</th><th>Actions</th>
       </tr>
     </thead>
     <tbody id="tableBody"></tbody>
@@ -140,6 +140,11 @@
     <label for="fImage">Photo</label>
     <input id="fImage" type="file" accept="image/*">
     <div id="fImagePreview" style="margin-top:.4rem;"></div>
+    <label for="fCoords">Location Found (coordinates)</label>
+    <div style="display:flex;gap:.35rem;">
+      <input id="fCoords" style="flex:1;" placeholder="e.g. 35.6762, -83.4300">
+      <button type="button" onclick="useMyLocation()" style="white-space:nowrap;padding:.4rem .6rem;border:1px solid #b5c4a8;border-radius:6px;background:#e8f0e0;cursor:pointer;font-size:.8rem;">📍 Use My Location</button>
+    </div>
     <label for="fNotes">Notes</label>
     <textarea id="fNotes" placeholder="Habitat, preparation tips, etc."></textarea>
     <div class="modal-actions">
@@ -223,7 +228,7 @@ function renderTable() {
   if (categoryFilter) filtered = filtered.filter(i => i.category === categoryFilter);
 
   if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="9" class="empty-state">${items.length ? 'No items match this filter.' : 'No items yet — click "+ Add Item" to start tracking.'}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" class="empty-state">${items.length ? 'No items match this filter.' : 'No items yet — click "+ Add Item" to start tracking.'}</td></tr>`;
     document.getElementById('cardContainer').innerHTML = `<div class="empty-state">${items.length ? 'No items match this filter.' : 'No items yet — tap "+ Add Item" to start tracking.'}</div>`;
     return;
   }
@@ -238,6 +243,7 @@ function renderTable() {
       <td>${item.forageStart} → ${item.forageEnd}</td>
       <td>${item.useByDays} days</td>
       <td>${statusBadge(status)}</td>
+      <td>${item.coords ? `<a href="https://www.google.com/maps?q=${encodeURIComponent(item.coords)}" target="_blank" rel="noopener" style="color:#4a7c34;">📍 Map</a>` : '—'}</td>
       <td>${esc(item.notes || '—')}</td>
       <td class="actions">
         <button onclick="editItem('${item.id}')" title="Edit" aria-label="Edit ${esc(item.name)}">✏️</button>
@@ -262,6 +268,7 @@ function renderTable() {
           ${esc(item.category)} · ${esc(item.season)}<br>
           📅 ${item.forageStart} → ${item.forageEnd}<br>
           ⏳ Use within ${item.useByDays} days
+          ${item.coords ? `<br>📍 <a href="https://www.google.com/maps?q=${encodeURIComponent(item.coords)}" target="_blank" rel="noopener" style="color:#4a7c34;">View on Map</a>` : ''}
           ${item.notes ? `<br>📝 ${esc(item.notes)}` : ''}
         </div>
         <div class="card-actions">
@@ -291,6 +298,7 @@ function openModal(id) {
     document.getElementById('fUseBy').value = item.useByDays;
     document.getElementById('fNotes').value = item.notes;
     document.getElementById('fImagePreview').innerHTML = item.image ? `<img src="${item.image}" class="img-preview" alt="Preview">` : '';
+    document.getElementById('fCoords').value = item.coords || '';
     pendingImage = item.image || null;
   } else {
     ['fName','fNotes'].forEach(id => document.getElementById(id).value = '');
@@ -300,6 +308,7 @@ function openModal(id) {
     document.getElementById('fImage').value = '';
     document.getElementById('fImagePreview').innerHTML = '';
     document.getElementById('fCategoryCustom').value = '';
+    document.getElementById('fCoords').value = '';
     populateCategoryDropdown();
     pendingImage = null;
   }
@@ -333,6 +342,14 @@ document.getElementById('fImage').addEventListener('change', function(e) {
   reader.readAsDataURL(file);
 });
 
+function useMyLocation() {
+  if (!navigator.geolocation) { alert('Geolocation is not supported by your browser.'); return; }
+  navigator.geolocation.getCurrentPosition(
+    pos => { document.getElementById('fCoords').value = `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`; },
+    err => { alert('Could not get your location. Make sure location access is enabled.'); }
+  );
+}
+
 function viewImage(id) {
   const item = items.find(i => i.id === id);
   if (!item || !item.image) return;
@@ -362,6 +379,7 @@ function saveItem() {
     forageEnd,
     useByDays: parseInt(document.getElementById('fUseBy').value) || 7,
     notes: document.getElementById('fNotes').value.trim(),
+    coords: document.getElementById('fCoords').value.trim() || null,
     image: pendingImage || null,
   };
 
@@ -394,9 +412,10 @@ function addToGCal(id) {
   const endD = new Date(endParts[0], endParts[1]-1, endParts[2]+1);
   const endDate = endD.toISOString().slice(0,10).replace(/-/g, '');
   const details = encodeURIComponent(
-    `Category: ${item.category}\nSeason: ${item.season}\nUse within ${item.useByDays} days of harvest.\n${item.notes ? 'Notes: ' + item.notes : ''}`
+    `Category: ${item.category}\nSeason: ${item.season}\nUse within ${item.useByDays} days of harvest.${item.coords ? '\nLocation: ' + item.coords : ''}\n${item.notes ? 'Notes: ' + item.notes : ''}`
   );
-  const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startDate}/${endDate}&details=${details}`;
+  const location = item.coords ? encodeURIComponent(item.coords) : '';
+  const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startDate}/${endDate}&details=${details}${location ? '&location=' + location : ''}`;
   window.open(url, '_blank', 'noopener');
 }
 
@@ -434,8 +453,8 @@ function loadBackup(event) {
 // CSV export
 function exportCSV() {
   if (!items.length) { alert('Nothing to export.'); return; }
-  const headers = ['Name','Category','Season','Forage Start','Forage End','Use-By Days','Notes'];
-  const rows = items.map(i => [i.name, i.category, i.season, i.forageStart, i.forageEnd, i.useByDays, i.notes].map(v => `"${String(v).replace(/"/g,'""')}"`));
+  const headers = ['Name','Category','Season','Forage Start','Forage End','Use-By Days','Coordinates','Notes'];
+  const rows = items.map(i => [i.name, i.category, i.season, i.forageStart, i.forageEnd, i.useByDays, i.coords || '', i.notes].map(v => `"${String(v).replace(/"/g,'""')}"`));
   const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
   const a = document.createElement('a');
