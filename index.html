@@ -96,6 +96,9 @@
     <option value="Winter">Winter</option>
     <option value="Year-round">Year-round</option>
   </select>
+  <select id="categoryFilter" onchange="renderTable()" aria-label="Filter by category">
+    <option value="">All Categories</option>
+  </select>
 </div>
 
 <div class="table-wrap">
@@ -157,7 +160,7 @@ let editingId = null;
 let pendingImage = null;
 
 function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); }
-function saveCategories() { localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories)); }
+function saveCategories() { localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories)); populateCategoryFilter(); }
 
 function populateCategoryDropdown(selected) {
   const sel = document.getElementById('fCategorySelect');
@@ -204,10 +207,20 @@ function statusBadge(status) {
   return `<span class="badge ${cls}">${status}</span>`;
 }
 
+function populateCategoryFilter() {
+  const sel = document.getElementById('categoryFilter');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">All Categories</option>' + categories.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  if (current) sel.value = current;
+}
+
 function renderTable() {
-  const filter = document.getElementById('seasonFilter').value;
+  const seasonFilter = document.getElementById('seasonFilter').value;
+  const categoryFilter = document.getElementById('categoryFilter').value;
   const tbody = document.getElementById('tableBody');
-  let filtered = filter ? items.filter(i => i.season === filter) : [...items];
+  let filtered = [...items];
+  if (seasonFilter) filtered = filtered.filter(i => i.season === seasonFilter);
+  if (categoryFilter) filtered = filtered.filter(i => i.category === categoryFilter);
 
   if (!filtered.length) {
     tbody.innerHTML = `<tr><td colspan="9" class="empty-state">${items.length ? 'No items match this filter.' : 'No items yet — click "+ Add Item" to start tracking.'}</td></tr>`;
@@ -448,6 +461,7 @@ if (!items.length) {
 document.getElementById('modalOverlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
+populateCategoryFilter();
 renderTable();
 </script>
 </body>
