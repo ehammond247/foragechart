@@ -119,10 +119,11 @@
     <label for="fName">Name</label>
     <input id="fName" placeholder="e.g. Chanterelle Mushroom">
     <label for="fCategory">Category</label>
-    <select id="fCategory">
-      <option>Mushroom</option><option>Flower</option><option>Berry</option>
-      <option>Herb</option><option>Nut</option><option>Green</option><option>Root</option><option>Other</option>
-    </select>
+    <div style="display:flex;gap:.35rem;">
+      <select id="fCategorySelect" style="flex:1;" onchange="if(this.value==='__custom')document.getElementById('fCategoryCustom').style.display='block'; else document.getElementById('fCategoryCustom').style.display='none';">
+      </select>
+      <input id="fCategoryCustom" style="flex:1;display:none;" placeholder="Type new category">
+    </div>
     <label for="fSeason">Forage Season</label>
     <select id="fSeason">
       <option>Spring</option><option>Summer</option><option>Fall</option><option>Winter</option><option>Year-round</option>
@@ -148,11 +149,44 @@
 <script>
 
 const STORAGE_KEY = 'foraging_chart';
+const CATEGORIES_KEY = 'foraging_categories';
+const DEFAULT_CATEGORIES = ['Mushroom','Flower','Berry','Herb','Nut','Green','Root','Other'];
 let items = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+let categories = JSON.parse(localStorage.getItem(CATEGORIES_KEY) || 'null') || [...DEFAULT_CATEGORIES];
 let editingId = null;
 let pendingImage = null;
 
 function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); }
+function saveCategories() { localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories)); }
+
+function populateCategoryDropdown(selected) {
+  const sel = document.getElementById('fCategorySelect');
+  const custom = document.getElementById('fCategoryCustom');
+  sel.innerHTML = categories.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('') + '<option value="__custom">+ New category…</option>';
+  if (selected && categories.includes(selected)) {
+    sel.value = selected;
+    custom.style.display = 'none';
+  } else if (selected && !categories.includes(selected)) {
+    // item has a category not in the list — add it
+    categories.push(selected);
+    saveCategories();
+    populateCategoryDropdown(selected);
+    return;
+  } else {
+    custom.style.display = 'none';
+  }
+}
+
+function getSelectedCategory() {
+  const sel = document.getElementById('fCategorySelect');
+  const custom = document.getElementById('fCategoryCustom');
+  if (sel.value === '__custom') {
+    const val = custom.value.trim();
+    if (val && !categories.includes(val)) { categories.push(val); saveCategories(); }
+    return val || categories[0];
+  }
+  return sel.value;
+}
 
 function getStatus(item) {
   const today = new Date();
@@ -237,7 +271,7 @@ function openModal(id) {
   if (id) {
     const item = items.find(i => i.id === id);
     document.getElementById('fName').value = item.name;
-    document.getElementById('fCategory').value = item.category;
+    populateCategoryDropdown(item.category);
     document.getElementById('fSeason').value = item.season;
     document.getElementById('fStart').value = item.forageStart;
     document.getElementById('fEnd').value = item.forageEnd;
@@ -252,6 +286,8 @@ function openModal(id) {
     document.getElementById('fEnd').value = '';
     document.getElementById('fImage').value = '';
     document.getElementById('fImagePreview').innerHTML = '';
+    document.getElementById('fCategoryCustom').value = '';
+    populateCategoryDropdown();
     pendingImage = null;
   }
   document.getElementById('modalOverlay').classList.remove('hidden');
@@ -307,7 +343,7 @@ function saveItem() {
 
   const data = {
     name,
-    category: document.getElementById('fCategory').value,
+    category: getSelectedCategory(),
     season: document.getElementById('fSeason').value,
     forageStart,
     forageEnd,
