@@ -104,6 +104,7 @@
   <select id="categoryFilter" onchange="renderTable()" aria-label="Filter by category">
     <option value="">All Categories</option>
   </select>
+  <input id="globalSearch" type="text" placeholder="🔍 Search..." oninput="renderTable()" aria-label="Search items" style="padding:.45rem .7rem;border:1px solid #b5c4a8;border-radius:6px;font-size:.85rem;min-width:140px;">
 </div>
 
 <div class="table-wrap">
@@ -234,6 +235,14 @@ function renderTable() {
   let filtered = [...items];
   if (seasonFilter) filtered = filtered.filter(i => i.season === seasonFilter);
   if (categoryFilter) filtered = filtered.filter(i => i.category === categoryFilter);
+  const search = (document.getElementById('globalSearch').value || '').toLowerCase().trim();
+  if (search) {
+    filtered = filtered.filter(i => {
+      const locs = getLocations(i).join(' ');
+      const haystack = `${i.name} ${i.category} ${i.season} ${i.forageStart} ${i.forageEnd} ${i.notes || ''} ${locs}`.toLowerCase();
+      return haystack.includes(search);
+    });
+  }
 
   if (!filtered.length) {
     tbody.innerHTML = `<tr><td colspan="10" class="empty-state">${items.length ? 'No items match this filter.' : 'No items yet — click "+ Add Item" to start tracking.'}</td></tr>`;
